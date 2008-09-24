@@ -6,23 +6,19 @@
 # License::   Distributes under the same terms as Ruby
 #
 #
-#= anything が更新されていたら、ダウンロードします。そんだけ。
+#=
+#emacswiki の anything (など)が更新されていたら、
+#ローカルのファイルを置き換えます。
 #
+#==
+#使用方法
 #
-#==依存ライブラリ
-#
-#*mechanize
-#
-#
-#==使用方法
 #% ./update-anything
 #
 
 require 'rubygems'
 require 'mechanize'
 require 'logger'
-
-require 'tempfile'
 
 class UpdateAnything
   def initialize(opts = {})
@@ -64,34 +60,41 @@ class UpdateAnything
     anythings = Dir::glob("*el")
 
     anythings.each do |fname|
-      local_version, remote_version = nil
-      versions_regexp = Regexp::union(
-        /version.+(\<.+\>)/, # anything-config.el
-        /\$Id.+(\d+\.\d+)/   # other
-        )
+      local_version = detect_version(File::open(fname).read)
 
-      ## local
-      File::open(fname).each do |line|
-        if line =~ versions_regexp
-          local_version ||= Regexp::last_match[1] || Regexp::last_match[2]
+      remote = fetch("#{url_base}#{fname}").body
+      remote_version = detect_version(remote)
+
+      puts [
+        "\n#{fname}",
+        "\tlocal_version  => #{local_version}",
+        "\tremote_version => #{remote_version}",
+      ].join("\n")
+
+      unless local_version == remote_version
+        puts "update detect.\n" + "updating..."
+        File::open(fname, 'w') do |f|
+          f.write remote
         end
+        puts "done."
       end
-
-      ## remote
-      t = Tempfile.open(['any', 'any'])
-      t.puts fetch("#{url_base}#{fname}").body
-      t.close; t.open
-      t.each do |line|
-        if line =~ versions_regexp
-          remote_version ||= Regexp::last_match[1] || Regexp::last_match[2]
-         end
-      end
-
-      puts "filefilename +
-        "local_version  => #{local_version}" +
-      "remote_version => #{remote_version}"
     end
   end
+
+  def detect_version(str)
+    version = nil
+    version_regexp = Regexp::union(
+      /version.+(\<.+\>)/, # anything-config.el
+      /\$Id.+(\d+\.\d+)/   # other
+      )
+    str.each do |line|
+      if line =~ version_regexp
+        version ||= Regexp::last_match[1] || Regexp::last_match[2]
+      end
+    end
+    version
+  end
+
 end
 
 if $0 == __FILE__
